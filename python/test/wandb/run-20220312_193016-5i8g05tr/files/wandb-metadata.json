@@ -1,0 +1,34 @@
+{
+    "os": "Linux-5.13.0-35-generic-x86_64-with-glibc2.29",
+    "python": "3.8.10",
+    "heartbeatAt": "2022-03-13T03:30:17.382679",
+    "startedAt": "2022-03-13T03:30:16.622602",
+    "docker": null,
+    "gpu": "NVIDIA GeForce RTX 3080",
+    "gpu_count": 1,
+    "cpu_count": 16,
+    "cuda": null,
+    "args": [
+        "--ip=127.0.0.1",
+        "--stdin=9003",
+        "--control=9001",
+        "--hb=9000",
+        "--Session.signature_scheme=\"hmac-sha256\"",
+        "--Session.key=b\"b3245ba9-4fa1-4813-986a-f5fec16a7589\"",
+        "--shell=9002",
+        "--transport=\"tcp\"",
+        "--iopub=9004",
+        "--f=/tmp/tmp-10528GFXxIaPOi8D5.json"
+    ],
+    "state": "running",
+    "program": "<python with no main file>",
+    "git": {
+        "remote": "git@gitlab.com:cardiac-vision/sphinxsys.git",
+        "commit": "ec5a50fac2e4769834286d85f302c686381d28e5"
+    },
+    "email": "haochendeng2000@berkeley.edu",
+    "root": "/home/daniel/sphinxsys",
+    "host": "daniel-ubuntu",
+    "username": "daniel",
+    "executable": "/bin/python3"
+}

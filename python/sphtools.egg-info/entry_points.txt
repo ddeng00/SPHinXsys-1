@@ -1,0 +1,4 @@
+[console_scripts]
+sphprocess = sphtools.process_data:main
+sphviz = sphtools.visualize:main
+

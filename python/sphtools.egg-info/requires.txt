@@ -1,0 +1,6 @@
+numpy
+scipy
+matplotlib
+pyvistaqt
+imageio-ffmpeg
+PyQt5

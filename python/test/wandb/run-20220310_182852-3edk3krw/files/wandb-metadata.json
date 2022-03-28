@@ -1,0 +1,32 @@
+{
+    "os": "Linux-5.15.21-1-MANJARO-x86_64-with-glibc2.35",
+    "python": "3.9.9",
+    "heartbeatAt": "2022-03-11T02:28:52.877192",
+    "startedAt": "2022-03-11T02:28:52.126430",
+    "docker": null,
+    "cpu_count": 16,
+    "cuda": null,
+    "args": [
+        "--ip=127.0.0.1",
+        "--stdin=9003",
+        "--control=9001",
+        "--hb=9000",
+        "--Session.signature_scheme=\"hmac-sha256\"",
+        "--Session.key=b\"403df1ad-2673-4a74-ae83-26a30103d2c1\"",
+        "--shell=9002",
+        "--transport=\"tcp\"",
+        "--iopub=9004",
+        "--f=/tmp/tmp-163926DrDQFV2adMHj.json"
+    ],
+    "state": "running",
+    "program": "<python with no main file>",
+    "git": {
+        "remote": "git@github.com:ddeng00/sphinxsys.git",
+        "commit": "f4bca9f75cc22dceb7dbf30d9f817ecaaa2b7308"
+    },
+    "email": null,
+    "root": "/home/daniel/sphinxsys",
+    "host": "galton03",
+    "username": "daniel",
+    "executable": "/home/daniel/.pyenv/versions/3.9.9/bin/python"
+}

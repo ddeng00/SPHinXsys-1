@@ -29,7 +29,7 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/generate_data.sh
         DESTINATION ${EXECUTABLE_OUTPUT_PATH})
 
 #aux_source_directory(. DIR_SRCS)
-add_executable(${PROJECT_NAME} main.cpp stimulus.h binary_writer.h models.h observers.h)
+add_executable(${PROJECT_NAME} main.cpp stimulus.h binary_writer.h models.h db_perlin.hpp)
 #target_link_libraries(${PROJECT_NAME} cnpy)
 
 add_test(NAME ${PROJECT_NAME}_particle_relaxation

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sphinxsys.h"
-#include <random>
 #include <unordered_map>
 
 using namespace SPH;
@@ -13,7 +12,7 @@ class StimulusCurrent : public electro_physiology::ElectroPhysiologyInitialCondi
 
  public:
   StimulusCurrent(SolidBody* muscle)
-      : electro_physiology::ElectroPhysiologyInitialCondition(muscle) {
+      : electro_physiology::ElectroPhysiologyInitialCondition(*muscle) {
 
     voltage_       = material_->SpeciesIndexMap()["Voltage"];
     gate_variable_ = material_->SpeciesIndexMap()["GateVariable"];
@@ -80,12 +79,11 @@ class RandomPulseTrain {
     }
 
     auto it = extra_stimuli_indexes_.begin();
-    while (it != extra_stimuli_indexes_.end())
-    {
+    while (it != extra_stimuli_indexes_.end()) {
       if (!ready_map_[*it] && particles_->species_n_[gate_variable_][*it] >= 0.8) {
         ready_map_[*it] = true;
       }
-      if (ready_map_[*it] && particles_->species_n_[gate_variable_][*it] <= 0.5) {
+      if (ready_map_[*it] && particles_->species_n_[gate_variable_][*it] <= 0.3) {
         IndexSphereStimulus stimulus(muscle_, *it, radius_, voltage_target_);
         stimulus.parallel_exec(dt);
         ready_map_.erase(*it);

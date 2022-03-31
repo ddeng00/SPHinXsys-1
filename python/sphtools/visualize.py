@@ -14,7 +14,7 @@ from .utils import ScreenExporter, _natural_sort_path_key
 
 pv.set_plot_theme('document')
 pv.global_theme.multi_samples = 8
-PNG_EXPORT_BASE_DIR = Path('./sphviz')
+EXPORT_BASE_DIR = Path('./sphviz')
 
 
 class MainWindow(Qt.QMainWindow):
@@ -22,9 +22,7 @@ class MainWindow(Qt.QMainWindow):
     frame_delay_msec = 20
     default_input_scalar = ' Voltage '
     ScalarRange = {
-        'Voltage': (-80, 20),  # (0, 1),
-        'GateVariable': (0, 1),
-        'ActiveContractionStress': (0, 0.01)
+        'Voltage': (-80, 20)
     }
     grays = cm.get_cmap("gray_r")
     cmap = ListedColormap(grays(np.linspace(0, 0.7, 255)), 'MyGrays')
@@ -35,8 +33,8 @@ class MainWindow(Qt.QMainWindow):
     # predefined opacity transfer function (options include: 'linear', 'linear_r', 'geom', 'geom_r').
     opacity = None
 
-    GLYPH_ELEM_SKIP = 400
-    GLYPH_SCALE_FACTOR = 50
+    GLYPH_ELEM_SKIP = 20
+    GLYPH_SCALE_FACTOR = 20
 
     def __init__(self, path=None, parent=None, show=False, make_pngs=False, make_video=False):
         super().__init__(parent)
@@ -309,7 +307,7 @@ class MainWindow(Qt.QMainWindow):
         self.load(self.t)
         self.reload_mesh()
         self.screen_exporter.set_params(
-            PNG_EXPORT_BASE_DIR / self.files[0].parent.name, len(self.files))
+            EXPORT_BASE_DIR / self.files[0].parent.name, len(self.files))
 
         self.timer.start()
 
@@ -416,6 +414,9 @@ def dir_path_validator(value):
 
 
 def main():
+    if not EXPORT_BASE_DIR.exists():
+        EXPORT_BASE_DIR.mkdir(exist_ok=True, parents=True)
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'dir', nargs='?', type=dir_path_validator, default=None)

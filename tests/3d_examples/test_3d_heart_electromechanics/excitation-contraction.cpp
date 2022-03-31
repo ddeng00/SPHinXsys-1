@@ -340,19 +340,16 @@ int main(int ac, char *av[])
 		DiffusionRelaxation diffusion_relaxation(relax_body_inner);
 		/** Compute the fiber and sheet after diffusion. */
 		ComputeFiberandSheetDirections compute_fiber_sheet(relax_body);
-		/** Write the body state to Vtp file. */
-		BodyStatesRecordingToVtp write_relax_body_state_to_vtp(in_output, {relax_body});
 		/** Write the particle reload files. */
-		ReloadParticleIO write_particle_reload_files(in_output, {&relax_body, &relax_body}, {physiology_body.getBodyName(), mechanics_body.getBodyName()});
+		ReloadParticleIO_NPZ write_particle_reload_files(in_output, {&relax_body, &relax_body}, {physiology_body.getBodyName(), mechanics_body.getBodyName()});
 		/** Write material property to xml file. */
-		ReloadMaterialParameterIO write_material_property(in_output, relax_body_material, myocardium_muscle->LocalParametersName());
+		ReloadMaterialParameterIO_NPZ write_material_property(in_output, relax_body_material, myocardium_muscle->LocalParametersName());
 		/**
 		 * @brief 	Physics relaxation starts here.
 		 */
 		/** Relax the elastic structure. */
 		random_particles.parallel_exec(0.25);
 		relaxation_step_inner.surface_bounding_.parallel_exec();
-		write_relax_body_state_to_vtp.writeToFile(0.0);
 		/**
 		 * From here the time stepping begins.
 		 * Set the starting time.
@@ -367,7 +364,6 @@ int main(int ac, char *av[])
 			if (ite % 100 == 0)
 			{
 				std::cout << std::fixed << std::setprecision(9) << "Relaxation steps N = " << ite << "\n";
-				write_relax_body_state_to_vtp.writeToFile(Real(ite) * 1.0e-4);
 			}
 		}
 
@@ -375,8 +371,6 @@ int main(int ac, char *av[])
 		/** constraint boundary condition for diffusion. */
 		DiffusionBCs impose_diffusion_bc(relax_body, surface_part);
 		impose_diffusion_bc.parallel_exec();
-
-		write_relax_body_state_to_vtp.writeToFile(Real(ite) * 1.0e-4);
 
 		Real dt = get_time_step_size.parallel_exec();
 		while (ite <= diffusion_step + relax_step)
@@ -386,13 +380,11 @@ int main(int ac, char *av[])
 			if (ite % 10 == 0)
 			{
 				std::cout << "Diffusion steps N=" << ite - relax_step << "	dt: " << dt << "\n";
-				write_relax_body_state_to_vtp.writeToFile(Real(ite) * 1.0e-4);
 			}
 			ite++;
 		}
 		compute_fiber_sheet.exec();
 		ite++;
-		write_relax_body_state_to_vtp.writeToFile(Real(ite) * 1.0e-4);
 		compute_fiber_sheet.parallel_exec();
 		write_material_property.writeToFile(0);
 		write_particle_reload_files.writeToFile(0);

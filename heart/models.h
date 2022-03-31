@@ -1,231 +1,183 @@
 #pragma once
 
 #include "sphinxsys.h"
+#include <unordered_map>
+
+#define DB_PERLIN_IMPL
+#include "db_perlin.hpp"
 
 using namespace SPH;
 
-class MyocardiumPhysiology : public LocalMonoFieldElectroPhysiology {
- public:
-  MyocardiumPhysiology(ElectroPhysiologyReaction* electro_physiology_reaction,
-                       Real diff_cf,
-                       Real bias_diff_cf,
-                       Vec3d& bias_direction)
-      : LocalMonoFieldElectroPhysiology(electro_physiology_reaction) {
+class AnisotropicAlievPanfilowModel : public AlievPanfilowModel
+{
+protected:
+  unordered_map<size_t, Real> heterogeneities_;
 
-    diff_cf_        = diff_cf;
-    bias_diff_cf_   = bias_diff_cf;
-    bias_direction_ = bias_direction;
+  virtual Real getProductionRateIonicCurrent(StdVec<StdLargeVec<Real>> &species, size_t particle_i) override
+  {
+    Real voltage = species[voltage_][particle_i];
+    return -k_ * voltage * (voltage * voltage - a_ * voltage - voltage) / c_m_;
+  }
+  virtual Real getLossRateIonicCurrent(StdVec<StdLargeVec<Real>> &species, size_t particle_i) override
+  {
+    Real gate_variable = species[gate_variable_][particle_i];
+    return (k_ * a_ + gate_variable) / c_m_;
+  }
+  virtual Real getProductionRateGateVariable(StdVec<StdLargeVec<Real>> &species, size_t particle_i) override
+  {
+    Real voltage = species[voltage_][particle_i];
+    Real gate_variable = species[gate_variable_][particle_i];
+    Real temp = epsilon_ + mu_1_ * gate_variable / (mu_2_ + voltage + Eps);
+    return -temp * k_ * voltage * (voltage - (b_ * heterogeneities_[particle_i]) - 1.0);
+  }
+  virtual Real getLossRateGateVariable(StdVec<StdLargeVec<Real>> &species, size_t particle_i) override
+  {
+    Real voltage = species[voltage_][particle_i];
+    Real gate_variable = species[gate_variable_][particle_i];
+    return epsilon_ + mu_1_ * gate_variable / (mu_2_ + voltage + Eps);
+  }
 
-    assignDerivedMaterialParameters();
-    initializeDiffusion();
+public:
+  explicit AnisotropicAlievPanfilowModel(Real k_a, Real c_m, Real k, Real a, Real b, Real mu_1, Real mu_2, Real epsilon)
+      : AlievPanfilowModel(k_a, c_m, k, a, b, mu_1, mu_2, epsilon){};
+  virtual ~AnisotropicAlievPanfilowModel(){};
+
+  void generate_heterogeneities(ElectroPhysiologyParticles &particles, Real chaos, Real scaling)
+  {
+    for (size_t i = 0; i < particles.pos_0_.size(); i++)
+    {
+      Vec3d pos = particles.pos_0_[i];
+      heterogeneities_[i] = (Real)1.0 + scaling * db::perlin(pos[0]/chaos, pos[1]/chaos, pos[2]/chaos);
+    }
   }
 };
 
-class MyocardiumMuscle : public ActiveMuscle<LocallyOrthotropicMuscle> {
- public:
-  MyocardiumMuscle(Real rho0, Real bulk_modulus, Vec3d& f0, Vec3d& s0, Real* a_0, Real* b_0)
-      : ActiveMuscle<LocallyOrthotropicMuscle>() {
-
-    rho0_         = rho0;
-    bulk_modulus_ = bulk_modulus;
-    f0_           = f0;
-    s0_           = s0;
-    std::copy(a_0, a_0 + 4, a0_);
-    std::copy(b_0, b_0 + 4, b0_);
-
-    assignDerivedMaterialParameters();
-  }
-};
-
-class MuscleReactionModel : public AlievPanfilowModel {
- public:
-  MuscleReactionModel(Real k_a, Real c_m, Real k, Real a, Real b, Real mu_1, Real mu_2, Real epsilon)
-      : AlievPanfilowModel() {
-
-    k_a_     = k_a;
-    c_m_     = c_m;
-    k_       = k;
-    a_       = a;
-    b_       = b;
-    mu_1_    = mu_1;
-    mu_2_    = mu_2;
-    epsilon_ = epsilon;
-
-    assignDerivedReactionParameters();
-  }
-};
-
-class HeartBody : public SolidBody {
- public:
-  HeartBody(SPHSystem& system, string body_name, std::string& path_to_file, Real length_scale)
-      : SolidBody(system, body_name) {
-
-    ComplexShape original_body_shape;
-    original_body_shape.addTriangleMeshShape(CreateHeart(path_to_file, length_scale),
-                                             ShapeBooleanOps::add);
-    body_shape_ = new LevelSetComplexShape(this, original_body_shape);
-  }
-
- private:
-  TriangleMeshShape* CreateHeart(std::string& path_to_file, Real length_scale) {
-
+/** Define geometry and initial conditions of SPH bodies. */
+class HeartBody : public SolidBody
+{
+public:
+  HeartBody(SPHSystem &system, const std::string &body_name, const std::string &path_to_file, Real length_scale)
+      : SolidBody(system, body_name)
+  {
     Vecd translation(-53.5 * length_scale, -70.0 * length_scale, -32.5 * length_scale);
-    TriangleMeshShape* geometry_myocardium =
-        new TriangleMeshShape(path_to_file, translation, length_scale);
-    return geometry_myocardium;
+    TriangleMeshShapeSTL triangle_mesh_heart_shape(path_to_file, translation, length_scale);
+    body_shape_.add<LevelSetShape>(this, triangle_mesh_heart_shape);
   }
 };
 
-/// Setup diffusion material properties for mapping the fiber direction
-class DiffusionMaterial
-    : public DiffusionReactionMaterial<ElasticSolidParticles, LocallyOrthotropicMuscle> {
-
- public:
-  DiffusionMaterial()
-      : DiffusionReactionMaterial<ElasticSolidParticles, LocallyOrthotropicMuscle>() {
-
-    insertASpecies("Phi");
-    assignDerivedMaterialParameters();
-    initializeDiffusion();
-  }
-
-  virtual void initializeDiffusion() override {
-
-    IsotropicDiffusion* phi_diffusion =
-        new IsotropicDiffusion(species_indexes_map_["Phi"], species_indexes_map_["Phi"]);
-    species_diffusion_.push_back(phi_diffusion);
-  };
-};
-
-/// Set diffusion relaxation
-class DiffusionRelaxation : public RelaxationOfAllDiffusionSpeciesRK2<
-                                SolidBody,
-                                ElasticSolidParticles,
-                                LocallyOrthotropicMuscle,
-                                RelaxationOfAllDiffussionSpeciesInner<SolidBody,
-                                                                      ElasticSolidParticles,
-                                                                      LocallyOrthotropicMuscle>,
-                                BodyRelationInner> {
- public:
-  DiffusionRelaxation(BodyRelationInner* body_inner_relation)
+/** Set diffusion relaxation method. */
+class DiffusionRelaxation
+    : public RelaxationOfAllDiffusionSpeciesRK2<
+          SolidBody, ElasticSolidParticles, LocallyOrthotropicMuscle,
+          RelaxationOfAllDiffussionSpeciesInner<SolidBody, ElasticSolidParticles, LocallyOrthotropicMuscle>,
+          BodyRelationInner>
+{
+public:
+  explicit DiffusionRelaxation(BodyRelationInner &body_inner_relation)
       : RelaxationOfAllDiffusionSpeciesRK2(body_inner_relation){};
-
   virtual ~DiffusionRelaxation(){};
 };
 
-/// Impose diffusion boundary conditions
-class DiffusionBCs : public ConstrainDiffusionBodyRegion<SolidBody,
-                                                         ElasticSolidParticles,
-                                                         ShapeSurface,
-                                                         LocallyOrthotropicMuscle> {
-
- protected:
+/** Imposing diffusion boundary condition */
+class DiffusionBCs
+    : public ConstrainDiffusionBodyRegion<SolidBody, ElasticSolidParticles, BodySurface, LocallyOrthotropicMuscle>
+{
+protected:
   size_t phi_;
+  virtual void Update(size_t index_i, Real dt = 0.0) override
+  {
+    Vecd dist_2_face = body_->body_shape_.findNormalDirection(pos_n_[index_i]);
+    Vecd face_norm = dist_2_face / (dist_2_face.norm() + 1.0e-15);
 
-  virtual void Update(size_t index_i, Real dt = 0.0) override {
-
-    Vecd dist_2_face = body_->body_shape_->findNormalDirection(pos_n_[index_i]);
-    Vecd face_norm   = dist_2_face / (dist_2_face.norm() + 1.0e-15);
     Vecd center_norm = pos_n_[index_i] / (pos_n_[index_i].norm() + 1.0e-15);
-    Real angle       = dot(face_norm, center_norm);
-    if (angle >= 0.0) {
+
+    Real angle = dot(face_norm, center_norm);
+    if (angle >= 0.0)
+    {
       species_n_[phi_][index_i] = 1.0;
-    } else {
-      if (pos_n_[index_i][1] < -body_->particle_adaptation_->ReferenceSpacing())
+    }
+    else
+    {
+      if (pos_n_[index_i][1] < -body_->sph_adaptation_->ReferenceSpacing())
         species_n_[phi_][index_i] = 0.0;
     }
   };
 
- public:
-  DiffusionBCs(SolidBody* body, ShapeSurface* body_part)
-      : ConstrainDiffusionBodyRegion<SolidBody,
-                                     ElasticSolidParticles,
-                                     ShapeSurface,
-                                     LocallyOrthotropicMuscle>(body, body_part) {
-
+public:
+  DiffusionBCs(SolidBody &body, BodySurface &body_part)
+      : ConstrainDiffusionBodyRegion<SolidBody, ElasticSolidParticles, BodySurface, LocallyOrthotropicMuscle>(body, body_part)
+  {
     phi_ = material_->SpeciesIndexMap()["Phi"];
   };
-
   virtual ~DiffusionBCs(){};
 };
 
-/// Update fiber and sheet direction after diffusion
+/** Compute Fiber and Sheet direction after diffusion */
 class ComputeFiberandSheetDirections
-    : public DiffusionBasedMapping<SolidBody, ElasticSolidParticles, LocallyOrthotropicMuscle> {
- protected:
+    : public DiffusionBasedMapping<SolidBody, ElasticSolidParticles, LocallyOrthotropicMuscle>
+{
+protected:
   size_t phi_;
   Real beta_epi_, beta_endo_;
-  /// The centerline vector that is parallel to the ventricular centerline and pointing apex-to-base
+  /** We define the centerline vector, which is parallel to the ventricular centerline and pointing  apex-to-base.*/
   Vecd center_line_;
-
-  virtual void Update(size_t index_i, Real dt = 0.0) override {
-
-    /// Probe the face norm from levelset field.
-    Vecd dist_2_face = body_->body_shape_->findNormalDirection(pos_n_[index_i]);
-    Vecd face_norm   = dist_2_face / (dist_2_face.norm() + 1.0e-15);
+  virtual void Update(size_t index_i, Real dt = 0.0) override
+  {
+    /**
+     * Ref: original doi.org/10.1016/j.euromechsol.2013.10.009
+     * 		Present  doi.org/10.1016/j.cma.2016.05.031
+     */
+    /** Probe the face norm from Levelset field. */
+    Vecd dist_2_face = body_->body_shape_.findNormalDirection(pos_n_[index_i]);
+    Vecd face_norm = dist_2_face / (dist_2_face.norm() + 1.0e-15);
     Vecd center_norm = pos_n_[index_i] / (pos_n_[index_i].norm() + 1.0e-15);
-    if (dot(face_norm, center_norm) <= 0.0) {
+    if (dot(face_norm, center_norm) <= 0.0)
+    {
       face_norm = -face_norm;
     }
-    /// Compute the centerline's projection on the plane orthogonal to face norm
+    /** Compute the centerline's projection on the plane orthogonal to face norm. */
     Vecd circumferential_direction = SimTK::cross(center_line_, face_norm);
     Vecd cd_norm = circumferential_direction / (circumferential_direction.norm() + 1.0e-15);
-    /// The rotation angle is given by beta = (beta_epi - beta_endo) phi + beta_endo
+    /** The rotation angle is given by beta = (beta_epi - beta_endo) phi + beta_endo */
     Real beta = (beta_epi_ - beta_endo_) * species_n_[phi_][index_i] + beta_endo_;
-    /// Compute the rotation matrix through Rodrigues rotation formulation
+    /** Compute the rotation matrix through Rodrigues rotation formulation. */
     Vecd f_0 = cos(beta) * cd_norm + sin(beta) * SimTK::cross(face_norm, cd_norm) +
                dot(face_norm, cd_norm) * (1.0 - cos(beta)) * face_norm;
 
-    if (pos_n_[index_i][1] < -body_->particle_adaptation_->ReferenceSpacing()) {
+    if (pos_n_[index_i][1] < -body_->sph_adaptation_->ReferenceSpacing())
+    {
       material_->local_f0_[index_i] = f_0 / (f_0.norm() + 1.0e-15);
       material_->local_s0_[index_i] = face_norm;
-    } else {
+    }
+    else
+    {
       material_->local_f0_[index_i] = Vecd(0);
       material_->local_s0_[index_i] = Vecd(0);
     }
   };
 
- public:
-  ComputeFiberandSheetDirections(SolidBody* body)
-      : DiffusionBasedMapping<SolidBody, ElasticSolidParticles, LocallyOrthotropicMuscle>(body) {
-
-    phi_         = material_->SpeciesIndexMap()["Phi"];
+public:
+  explicit ComputeFiberandSheetDirections(SolidBody &body)
+      : DiffusionBasedMapping<SolidBody, ElasticSolidParticles, LocallyOrthotropicMuscle>(body)
+  {
+    phi_ = material_->SpeciesIndexMap()["Phi"];
     center_line_ = Vecd(0.0, 1.0, 0.0);
-    beta_epi_    = -(70.0 / 180.0) * M_PI;
-    beta_endo_   = (80.0 / 180.0) * M_PI;
+    beta_epi_ = -(70.0 / 180.0) * M_PI;
+    beta_endo_ = (80.0 / 180.0) * M_PI;
   };
-
   virtual ~ComputeFiberandSheetDirections(){};
 };
 
-/// Define the beam base which will be constrained.
-/// Must be instantiated after all body particles have been generated.
-class MuscleBase : public BodyPartByParticle {
- public:
-  MuscleBase(SolidBody* solid_body,
-             std::string constrained_region_name,
-             BoundingBox& domain_bounds,
-             Real dp_0,
-             Real length_scale)
-      : BodyPartByParticle(solid_body, constrained_region_name) {
-
-    body_part_shape_ = new ComplexShape(constrained_region_name);
-    body_part_shape_->addTriangleMeshShape(CreateBaseShape(domain_bounds, dp_0, length_scale),
-                                           ShapeBooleanOps::add);
-
-    /// Tag the constrained particles to the base for constraint
-    tagBodyPart();
-  }
-
- private:
-  TriangleMeshShape* CreateBaseShape(BoundingBox& domain_bounds, Real dp_0, Real length_scale) {
-
-    Real l = domain_bounds.second[0] - domain_bounds.first[0];
-    Real w = domain_bounds.second[2] - domain_bounds.first[2];
-    Vecd halfsize_shape(0.5 * l, 1.0 * dp_0, 0.5 * w);
-    Vecd translation_shape(-10.0 * length_scale, -1.0 * dp_0, 0.0);
-    TriangleMeshShape* geometry = new TriangleMeshShape(halfsize_shape, 20, translation_shape);
-
-    return geometry;
+//	define shape parameters which will be used for the constrained body part.
+class MuscleBaseShapeParameters : public TriangleMeshShapeBrick::ShapeParameters
+{
+public:
+  MuscleBaseShapeParameters(const Vec3d &domain_upper_bound, const Vec3d &domain_lower_bound, Real length_scale, Real dp_0) : TriangleMeshShapeBrick::ShapeParameters()
+  {
+    Real l = domain_upper_bound[0] - domain_lower_bound[0];
+    Real w = domain_upper_bound[2] - domain_lower_bound[2];
+    halfsize_ = Vec3d(0.5 * l, 1.0 * dp_0, 0.5 * w);
+    resolution_ = 20;
+    translation_ = Vec3d(-10.0 * length_scale, -1.0 * dp_0, 0.0);
   }
 };
